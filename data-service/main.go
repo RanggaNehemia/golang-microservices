@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"time"
 
 	"github.com/RanggaNehemia/golang-microservices/data-service/controllers"
@@ -38,5 +39,10 @@ func main() {
 	protected.GET("/latest", controllers.GetLatestPrice)
 	protected.GET("/lowest", controllers.GetLowestPrice)
 
-	router.Run(":5081")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8081" // default port if not specified
+	}
+
+	router.Run(":" + port)
 }

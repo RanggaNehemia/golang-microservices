@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/RanggaNehemia/golang-microservices/trade-service/database"
 	"github.com/RanggaNehemia/golang-microservices/trade-service/routes"
 	"github.com/gin-gonic/gin"
@@ -13,5 +15,10 @@ func main() {
 
 	routes.RegisterTradeRoutes(router)
 
-	router.Run(":8082")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8082" // default port if not specified
+	}
+
+	router.Run(":" + port)
 }
