@@ -171,3 +171,24 @@ Use this for internal communication (e.g., trade - data).
 Trades cannot be placed below 50% of the lowest price in the last 24 hours.
 
 ---
+
+# Unit Testing
+## Setup
+Create .env.test in root of each service \
+Example for auth-service/.env.test:
+```env
+GORM_TEST_DATABASE_URL="host=localhost user=<user> password=<password> dbname=<test_database_name> port=<port> sslmode=disable TimeZone=UTC"
+SECRET_KEY=testsecret
+```
+
+## Run Test
+From each service:
+```bash
+go test -v ./...
+
+```
+Tests include:
+- User registration
+- OAuth2 token issuance
+- Protected resource access
+- Token introspection & revocation
