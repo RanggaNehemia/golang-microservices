@@ -3,12 +3,15 @@ package controllers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/RanggaNehemia/golang-microservices/trade-service/database"
 	"github.com/RanggaNehemia/golang-microservices/trade-service/models"
+	"github.com/RanggaNehemia/golang-microservices/trade-service/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -19,13 +22,15 @@ type TradeInput struct {
 }
 
 func fetchLowestPrice() (float64, error) {
-	machineToken := os.Getenv("TRADE_SERVICE_TOKEN")
-
-	req, err := http.NewRequest("GET", "http://localhost:8081/data/lowest", nil)
+	token, err := utils.GetMachineToken()
 	if err != nil {
 		return 0, err
 	}
-	req.Header.Set("Authorization", "Bearer "+machineToken)
+
+	log.Println(token)
+
+	req, _ := http.NewRequest("GET", os.Getenv("DATA_SERVICE_URL")+"/data/lowest", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	client := http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
@@ -72,8 +77,21 @@ func PlaceTrade(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User token required"})
 		return
 	}
-	userID := userIDVal.(uint)
 
+	// Convert string to uint
+	userIDStr, ok := userIDVal.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID format"})
+		return
+	}
+	userIDUint64, err := strconv.ParseUint(userIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user ID"})
+		return
+	}
+	userID := uint(userIDUint64)
+
+	// Now use userID (as uint) safely
 	trade := models.Trade{
 		UserID:   userID,
 		Price:    input.Price,

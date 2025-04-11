@@ -1,8 +1,10 @@
 package middleware
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -12,6 +14,7 @@ import (
 )
 
 var SecretKey []byte
+var expectedAud string
 
 func init() {
 	err := godotenv.Load()
@@ -23,45 +26,58 @@ func init() {
 		log.Fatal("SECRET_KEY not set in environment")
 	}
 	SecretKey = []byte(secret)
+	expectedAud = os.Getenv("WEB_CLIENT_ID")
 }
 
 func RequireUserToken() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token"})
-			c.Abort()
+		h := c.GetHeader("Authorization")
+		parts := strings.SplitN(h, " ", 2)
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Missing or bad auth header"})
 			return
 		}
+		tokenString := parts[1]
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token format"})
-			c.Abort()
-			return
-		}
-
-		token, err := jwt.Parse(parts[1], func(token *jwt.Token) (interface{}, error) {
+		// Local signature + exp check
+		token, err := jwt.Parse(parts[1], func(t *jwt.Token) (interface{}, error) {
 			return SecretKey, nil
 		})
-
 		if err != nil || !token.Valid {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
-			c.Abort()
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			return
 		}
 
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok || claims["sub"] != "user" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "User token required"})
-			c.Abort()
+		// Validity Check
+		resp, err := http.PostForm(
+			os.Getenv("AUTH_URL")+"/oauth/introspect",
+			url.Values{"token": {tokenString}},
+		)
+		if err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": "Introspection failed"})
+			return
+		}
+		defer resp.Body.Close()
+
+		var body struct {
+			Active bool `json:"active"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": "Bad introspection response"})
+			return
+		}
+		if !body.Active {
+			c.AbortWithStatusJSON(401, gin.H{"error": "Token revoked"})
 			return
 		}
 
-		// Store user info in context for later use
-		c.Set("user_id", uint(claims["user_id"].(float64)))
-		c.Set("username", claims["username"].(string))
-
+		// Audience Check
+		claims := token.Claims.(jwt.MapClaims)
+		if aud, _ := claims["aud"].(string); aud != expectedAud {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Wrong audience"})
+			return
+		}
+		c.Set("user_id", claims["sub"])
 		c.Next()
 	}
 }

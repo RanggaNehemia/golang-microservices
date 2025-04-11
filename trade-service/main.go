@@ -6,9 +6,12 @@ import (
 	"github.com/RanggaNehemia/golang-microservices/trade-service/database"
 	"github.com/RanggaNehemia/golang-microservices/trade-service/routes"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	_ = godotenv.Load()
+
 	database.InitDB()
 
 	router := gin.Default()
