@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
 	"os"
 	"time"
@@ -11,13 +10,20 @@ import (
 	"github.com/RanggaNehemia/golang-microservices/data-service/middleware"
 	"github.com/RanggaNehemia/golang-microservices/data-service/models"
 	"github.com/RanggaNehemia/golang-microservices/data-service/tracing"
+	"github.com/RanggaNehemia/golang-microservices/data-service/utils"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.uber.org/zap"
 )
 
 func main() {
+	// Tracer
 	shutdown := tracing.InitTracer()
 	defer shutdown()
+
+	// Logger
+	utils.InitLogger()
+	defer utils.SyncLogger()
 
 	database.ConnectDatabase()
 
@@ -35,7 +41,7 @@ func main() {
 					Value: float64(rand.Intn(10000)) + rand.Float64(), // Random 0–10000.x
 				}
 				database.DB.Create(&price)
-				fmt.Println("Generated price:", price.Value)
+				utils.Logger.Info("Generated price:", zap.Float64("Price", price.Value))
 			}
 		}
 	}()

@@ -2,15 +2,16 @@ package middleware
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 
+	"github.com/RanggaNehemia/golang-microservices/trade-service/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
+	"go.uber.org/zap"
 )
 
 var SecretKey []byte
@@ -19,11 +20,11 @@ var expectedAud string
 func init() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("No .env file found")
+		utils.Logger.Panic("No .env file found", zap.Error(err))
 	}
 	secret := os.Getenv("SECRET_KEY")
 	if secret == "" {
-		log.Fatal("SECRET_KEY not set in environment")
+		utils.Logger.Fatal("SECRET_KEY not set in environment")
 	}
 	SecretKey = []byte(secret)
 	expectedAud = os.Getenv("WEB_CLIENT_ID")
@@ -34,6 +35,7 @@ func RequireUserToken() gin.HandlerFunc {
 		h := c.GetHeader("Authorization")
 		parts := strings.SplitN(h, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
+			utils.Logger.Warn("Missing or bad auth header")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Missing or bad auth header"})
 			return
 		}
@@ -44,6 +46,7 @@ func RequireUserToken() gin.HandlerFunc {
 			return SecretKey, nil
 		})
 		if err != nil || !token.Valid {
+			utils.Logger.Warn("Invalid token")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			return
 		}
@@ -54,6 +57,7 @@ func RequireUserToken() gin.HandlerFunc {
 			url.Values{"token": {tokenString}},
 		)
 		if err != nil {
+			utils.Logger.Warn("Introspection failed", zap.Error(err))
 			c.AbortWithStatusJSON(500, gin.H{"error": "Introspection failed"})
 			return
 		}
@@ -63,6 +67,7 @@ func RequireUserToken() gin.HandlerFunc {
 			Active bool `json:"active"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			utils.Logger.Error("Bad introspection response", zap.Error(err))
 			c.AbortWithStatusJSON(500, gin.H{"error": "Bad introspection response"})
 			return
 		}
@@ -74,6 +79,7 @@ func RequireUserToken() gin.HandlerFunc {
 		// Audience Check
 		claims := token.Claims.(jwt.MapClaims)
 		if aud, _ := claims["aud"].(string); aud != expectedAud {
+			utils.Logger.Warn("Wrong audience", zap.String("Audience", aud))
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Wrong audience"})
 			return
 		}

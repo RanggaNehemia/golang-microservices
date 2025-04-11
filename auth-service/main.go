@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -21,12 +20,18 @@ import (
 	pg "github.com/vgarvardt/go-oauth2-pg/v4"
 	"github.com/vgarvardt/go-pg-adapter/pgx4adapter"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	zap "go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
 func main() {
+	// Tracer
 	shutdown := tracing.InitTracer()
 	defer shutdown()
+
+	// Logger
+	utils.InitLogger()
+	defer utils.SyncLogger()
 
 	cfg := utils.Load()
 
@@ -36,7 +41,7 @@ func main() {
 
 	pgxConn, err := pgx.Connect(ctx, cfg.PGXDatabaseURL)
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v\n", err)
+		utils.Logger.Fatal("Unable to connect to database", zap.Error(err))
 	}
 	defer pgxConn.Close(ctx)
 
@@ -50,7 +55,7 @@ func main() {
 	// Token
 	tokenStore, err := pg.NewTokenStore(adapter, pg.WithTokenStoreGCInterval(time.Minute))
 	if err != nil {
-		log.Fatalf("Failed to create token store: %v\n", err)
+		utils.Logger.Fatal("Failed to create token store", zap.Error(err))
 	}
 	defer tokenStore.Close()
 	manager.MapTokenStorage(tokenStore)
@@ -58,7 +63,7 @@ func main() {
 	//Client
 	clientStore, err := pg.NewClientStore(adapter)
 	if err != nil {
-		log.Fatalf("Failed to create client store: %v\n", err)
+		utils.Logger.Fatal("Failed to create client store", zap.Error(err))
 	}
 	manager.MapClientStorage(clientStore)
 
@@ -75,11 +80,10 @@ func main() {
 
 	srv.SetClientInfoHandler(func(r *http.Request) (id, secret string, err error) {
 		if err := r.ParseForm(); err != nil {
-			log.Printf("ParseForm error: %v", err)
+			utils.Logger.Error("ParseForm error", zap.Error(err))
 		}
 		id = r.Form.Get("client_id")
 		secret = r.Form.Get("client_secret")
-		log.Printf("ClientInfoHandler sees client_id=%q, client_secret=%q", id, secret)
 		return id, secret, nil
 	})
 
@@ -97,11 +101,11 @@ func main() {
 		return userID, nil
 	})
 	srv.SetInternalErrorHandler(func(err error) *oauth2Errors.Response {
-		log.Printf("OAuth2 Internal Error: %v", err)
+		utils.Logger.Error("OAuth2 Internal Error", zap.Error(err))
 		return nil
 	})
 	srv.SetResponseErrorHandler(func(re *oauth2Errors.Response) {
-		log.Printf("OAuth2 Response Error: %v", re.Error)
+		utils.Logger.Error("OAuth2 Response Error", zap.Error(re.Error))
 	})
 
 	// GIN
@@ -146,7 +150,7 @@ func main() {
 					err = tokenStore.RemoveByRefresh(c.Request.Context(), token)
 				}
 			}
-			// Always return 200 even if token wasn't found per spec
+			utils.Logger.Info("Token revoked", zap.String("token", token))
 			c.Status(http.StatusOK)
 		})
 
@@ -154,6 +158,7 @@ func main() {
 		oauth.POST("/introspect", func(c *gin.Context) {
 			token := c.PostForm("token")
 			if token == "" {
+				utils.Logger.Warn("Invalid Introspect request")
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
 				return
 			}
@@ -173,6 +178,7 @@ func main() {
 				resp["iat"] = ti.GetAccessCreateAt().Unix()
 				resp["exp"] = ti.GetAccessCreateAt().Add(ti.GetAccessExpiresIn()).Unix()
 			}
+			utils.Logger.Info("Token introspected", zap.String("token", token))
 			c.JSON(http.StatusOK, resp)
 		})
 	}

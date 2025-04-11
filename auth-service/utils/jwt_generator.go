@@ -7,6 +7,7 @@ import (
 	"github.com/go-oauth2/oauth2/v4"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 type contextKey string
@@ -50,6 +51,7 @@ func (cg *CustomJWTAccessGenerate) Token(
 	token := jwt.NewWithClaims(cg.SigningMethod, claims)
 	access, err = token.SignedString(cg.SignedKey)
 	if err != nil {
+		Logger.Error("Error on generating JWT Token", zap.Error(err))
 		return "", "", err
 	}
 
@@ -57,5 +59,6 @@ func (cg *CustomJWTAccessGenerate) Token(
 		refresh = uuid.New().String()
 	}
 
+	Logger.Info("JWT Token generated")
 	return access, refresh, nil
 }

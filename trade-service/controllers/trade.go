@@ -3,7 +3,6 @@ package controllers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 	"github.com/RanggaNehemia/golang-microservices/trade-service/database"
 	"github.com/RanggaNehemia/golang-microservices/trade-service/models"
 	"github.com/RanggaNehemia/golang-microservices/trade-service/utils"
+	"go.uber.org/zap"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,8 +27,6 @@ func fetchLowestPrice() (float64, error) {
 		return 0, err
 	}
 
-	log.Println(token)
-
 	req, _ := http.NewRequest("GET", os.Getenv("DATA_SERVICE_URL")+"/data/lowest", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 
@@ -40,6 +38,7 @@ func fetchLowestPrice() (float64, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
+		utils.Logger.Error("Error on fetching lowest price")
 		return 0, fmt.Errorf("error on fetching lowest price: %d", resp.StatusCode)
 	}
 
@@ -48,6 +47,7 @@ func fetchLowestPrice() (float64, error) {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		utils.Logger.Error("Failed to parse JSON", zap.Error(err))
 		return 0, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
@@ -63,6 +63,7 @@ func PlaceTrade(c *gin.Context) {
 
 	lowestPrice, err := fetchLowestPrice()
 	if err != nil {
+		utils.Logger.Error("Error on fetching lowest price", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
@@ -74,6 +75,7 @@ func PlaceTrade(c *gin.Context) {
 
 	userIDVal, exists := c.Get("user_id")
 	if !exists {
+		utils.Logger.Warn("Missing user token")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User token required"})
 		return
 	}
@@ -81,11 +83,13 @@ func PlaceTrade(c *gin.Context) {
 	// Convert string to uint
 	userIDStr, ok := userIDVal.(string)
 	if !ok {
+		utils.Logger.Warn("Invalid user ID format")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID format"})
 		return
 	}
 	userIDUint64, err := strconv.ParseUint(userIDStr, 10, 64)
 	if err != nil {
+		utils.Logger.Error("Failed to parse user ID", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user ID"})
 		return
 	}
@@ -99,9 +103,11 @@ func PlaceTrade(c *gin.Context) {
 	}
 
 	if err := database.DB.Create(&trade).Error; err != nil {
+		utils.Logger.Error("Failed to save trade", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save trade"})
 		return
 	}
 
+	utils.Logger.Info("Trade placed", zap.Uint("trade", trade.ID))
 	c.JSON(http.StatusOK, gin.H{"message": "Trade placed", "trade": trade})
 }

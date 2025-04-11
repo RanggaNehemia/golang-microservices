@@ -2,15 +2,16 @@ package middleware
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 
+	"github.com/RanggaNehemia/golang-microservices/data-service/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
+	"go.uber.org/zap"
 )
 
 var SecretKey []byte
@@ -20,12 +21,12 @@ func init() {
 	// Load environment variables from .env file
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("No .env file found")
+		utils.Logger.Panic("No .env file found", zap.Error(err))
 	}
 
 	secret := os.Getenv("SECRET_KEY")
 	if secret == "" {
-		log.Fatal("SECRET_KEY not set in environment")
+		utils.Logger.Error("SECRET_KEY not set in environment", zap.Error(err))
 	}
 
 	SecretKey = []byte(secret)
@@ -38,6 +39,7 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 		h := c.GetHeader("Authorization")
 		parts := strings.SplitN(h, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
+			utils.Logger.Warn("Missing or bad auth header")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Missing or bad auth header"})
 			return
 		}
@@ -48,6 +50,7 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 			return SecretKey, nil
 		})
 		if err != nil || !token.Valid {
+			utils.Logger.Warn("Invalid token", zap.Error(err))
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			return
 		}
@@ -58,6 +61,7 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 			url.Values{"token": {tokenString}},
 		)
 		if err != nil {
+			utils.Logger.Error("Token Introspection failed", zap.Error(err))
 			c.AbortWithStatusJSON(500, gin.H{"error": "Introspection failed"})
 			return
 		}
@@ -67,6 +71,7 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 			Active bool `json:"active"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			utils.Logger.Error("Bad Introspection result", zap.Error(err))
 			c.AbortWithStatusJSON(500, gin.H{"error": "Bad introspection response"})
 			return
 		}
@@ -78,6 +83,7 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 		// Audience Check
 		claims := token.Claims.(jwt.MapClaims)
 		if aud, _ := claims["aud"].(string); aud != expectedAud {
+			utils.Logger.Warn("Wrong audience", zap.String("audience", aud))
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Wrong audience"})
 			return
 		}

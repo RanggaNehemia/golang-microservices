@@ -1,11 +1,11 @@
 package database
 
 import (
-	"fmt"
-	"log"
 	"os"
 
+	"github.com/RanggaNehemia/golang-microservices/auth-service/utils"
 	"github.com/joho/godotenv"
+	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -15,15 +15,15 @@ var DB *gorm.DB
 func ConnectDatabase() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("No .env file found")
+		utils.Logger.Panic("No .env file found")
 	}
 
 	dsn := os.Getenv("GORM_DATABASE_URL")
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Fatal("Failed to connect to PostgreSQL:", err)
+		utils.Logger.Fatal("Failed to connect to PostgreSQL", zap.Error(err))
 	}
 
 	DB = db
-	fmt.Println("Migrated")
+	utils.Logger.Info("Authentication Database Migrated")
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/RanggaNehemia/golang-microservices/auth-service/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"go.uber.org/zap"
 )
 
 func JWTAuthMiddleware() gin.HandlerFunc {
@@ -14,6 +15,7 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 		authHeader := c.GetHeader("Authorization")
 
 		if authHeader == "" {
+			utils.Logger.Warn("Missing Authorization header")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header required"})
 			c.Abort()
 			return
@@ -21,6 +23,7 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+			utils.Logger.Warn("Malformed Authorization header")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization format must be Bearer <token>"})
 			c.Abort()
 			return
@@ -33,6 +36,7 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 		})
 
 		if err != nil || !token.Valid {
+			utils.Logger.Warn("Invalid or expired token", zap.Error(err))
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 			c.Abort()
 			return
