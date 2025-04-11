@@ -7,12 +7,14 @@ Utilizes OAuth2-compliant authentication and inter-service communication using J
 
 ## Microservices Overview
 
-| Service         | Port | Description |
-|------------------|------|-------------|
-| `auth-service`   | 8080 | Handles user and machine authentication with token issuance |
-| `data-service`   | 8081 | Periodically generates and stores random pricing data |
-| `trade-service`  | 8082 | Allows users to place validated trades based on price data |
+| Service         | Port | Description                                                 |
+| --------------- | ---- | ----------------------------------------------------------- |
+| `auth-service`  | 8080 | Handles user and machine authentication with token issuance |
+| `data-service`  | 8081 | Periodically generates and stores random pricing data       |
+| `trade-service` | 8082 | Allows users to place validated trades based on price data  |
+
 ---
+
 Port 8080, 8081, and 8082 are the default ports for each services.
 
 ## Getting Started
@@ -65,7 +67,8 @@ These are the example of the env:
 
 ```env
 PORT=8080
-DATABASE_URL="host=localhost user=<user> password=<password> dbname=<auth_database_name> port=5432 sslmode=disable TimeZone=UTC"
+GORM_DATABASE_URL="host=<host> user=<user> password=<password> dbname=<database> port=<port> sslmode=disable TimeZone=UTC"
+PGX_DATABASE_URL="postgres://<user>:<password>@<host>:<port>/<database>?sslmode=disable&timezone=UTC"
 SECRET_KEY=<secret_key>
 ```
 
@@ -73,19 +76,24 @@ SECRET_KEY=<secret_key>
 
 ```env
 PORT=8081
-DATABASE_URL="host=localhost user=<user> password=<password> dbname=<data_database_name> port=5432 sslmode=disable TimeZone=UTC"
+DATABASE_URL="host=localhost user=<user> password=<password> dbname=<data_database_name> port=<port> sslmode=disable TimeZone=UTC"
 SECRET_KEY=<secret_key>
+TRADE_SERVICE_CLIENT_ID="trade-service"
+AUTH_URL="<auth-service-url>"
 ```
 
 #### `trade-service/.env`
 
 ```env
 PORT=8082
-DATABASE_URL="host=localhost user=<user> password=<password> dbname=<trade_database_name> port=5432 sslmode=disable TimeZone=UTC"
+DATABASE_URL="host=localhost user=<user> password=<password> dbname=<trade_database_name> port=<port> sslmode=disable TimeZone=UTC"
 SECRET_KEY=<secret_key>
 DATA_SERVICE_URL="<data_service_url:port>"
 TRADE_SERVICE_TOKEN="<trade service token>"
-
+TRADE_SERVICE_CLIENT_ID="<trade-service client id>"
+TRADE_SERVICE_CLIENT_SECRET="<trade-service client secret>"
+WEB_CLIENT_ID="<web-client id>"
+AUTH_URL="<auth-service-url>"
 ```
 
 ### 4. Install Dependencies
@@ -113,29 +121,15 @@ go run main.go
 ### User Login Flow
 
 - `POST /auth/register` - Register new user
-- `POST /auth/login` - Login and get JWT token
+- `POST /oauth/token` - Login and get JWT token
 
 Use this token to authenticate user actions like placing trades.
 
 ### Machine Login Flow
 
-Add the service into Client table in Authentication Database
-
-```sql
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-INSERT INTO clients (name, secret, created_at, updated_at)
-VALUES (
-  '<service name>',
-  crypt('<secret key>', gen_salt('bf')),
-  NOW(),
-  NOW()
-);
-```
-
 Call the API
 
-- `POST /auth/client/token` - Authenticate service and get machine token
+- `POST /oauth/token` - Authenticate service and get machine token
 
 Use this for internal communication (e.g., trade - data).
 
@@ -143,33 +137,36 @@ Use this for internal communication (e.g., trade - data).
 
 ## Auth Service Endpoints
 
-| Endpoint            | Method | Description                                 |
-|---------------------|--------|---------------------------------------------|
-| `/auth/register`    | POST   | Register New User                           |
-| `/auth/login`       | POST   | Login and get JWT token                     |
-| `/auth/client/token`| POST   | Authenticate service and get machine token  |
-| `/auth/me`       	  | GET    | Retrieve current user details               |
+| Endpoint            | Method | Description                   |
+| ------------------- | ------ | ----------------------------- |
+| `/health`           | GET    | Health Check                  |
+| `/auth/register`    | POST   | Register New User             |
+| `/oauth/token`      | POST   | Login and get JWT token       |
+| `/oauth/authorize`  | POST   | Authorize the token given     |
+| `/oauth/introspect` | POST   | Introspect the token given    |
+| `/oauth/revoke`     | POST   | revoke the token given        |
+| `/auth/me`          | GET    | Retrieve current user details |
 
 ---
 
 ## Data Service Endpoints
 
-| Endpoint            | Method | Description                        |
-|---------------------|--------|------------------------------------|
-| `/data/latest`      | GET    | Returns the most recent price      |
-| `/data/lowest`      | GET    | Returns the lowest price in 24 hrs |
+| Endpoint       | Method | Description                        |
+| -------------- | ------ | ---------------------------------- |
+| `/data/latest` | GET    | Returns the most recent price      |
+| `/data/lowest` | GET    | Returns the lowest price in 24 hrs |
 
-> Requires a **machine token**
+> Requires token with trade-service audience
 
 ---
 
 ## Trade Service Endpoints
 
-| Endpoint          | Method | Description                                  |
-|-------------------|--------|----------------------------------------------|
-| `/trades`         | POST   | Place a new trade                            |
+| Endpoint       | Method | Description       |
+| -------------- | ------ | ----------------- |
+| `/trade/place` | POST   | Place a new trade |
 
-> Requires a **user token**
+> Requires a token with web-service audience
 
 Trades cannot be placed below 50% of the lowest price in the last 24 hours.
 
