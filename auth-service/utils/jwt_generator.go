@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/go-oauth2/oauth2/v4"
@@ -31,17 +30,12 @@ func (cg *CustomJWTAccessGenerate) Token(
 	data *oauth2.GenerateBasic,
 	isGenRefresh bool,
 ) (access, refresh string, err error) {
-	// Extract client ID from context as workaround
-	fmt.Printf("GenerateBasic: client = %#v, userID = %s\n", data.Client, data.UserID)
-
 	aud := ""
 	if data.Client != nil {
 		aud = data.Client.GetID()
 	} else if cid := ctx.Value(ClientIDKey); cid != nil {
 		aud = cid.(string)
 	}
-
-	fmt.Printf("🪪  Token generator input: clientID='%v', userID='%v'\n", aud, data.UserID)
 
 	claims := jwt.MapClaims{
 		"iss":   "https://auth.sampledomain.com",

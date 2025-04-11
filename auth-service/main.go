@@ -10,6 +10,7 @@ import (
 	"github.com/RanggaNehemia/golang-microservices/auth-service/database"
 	"github.com/RanggaNehemia/golang-microservices/auth-service/models"
 	"github.com/RanggaNehemia/golang-microservices/auth-service/routes"
+	"github.com/RanggaNehemia/golang-microservices/auth-service/tracing"
 	"github.com/RanggaNehemia/golang-microservices/auth-service/utils"
 	"github.com/gin-gonic/gin"
 	oauth2Errors "github.com/go-oauth2/oauth2/v4/errors"
@@ -19,10 +20,14 @@ import (
 	"github.com/jackc/pgx/v4"
 	pg "github.com/vgarvardt/go-oauth2-pg/v4"
 	"github.com/vgarvardt/go-pg-adapter/pgx4adapter"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"golang.org/x/crypto/bcrypt"
 )
 
 func main() {
+	shutdown := tracing.InitTracer()
+	defer shutdown()
+
 	cfg := utils.Load()
 
 	database.ConnectDatabase()
@@ -99,9 +104,10 @@ func main() {
 		log.Printf("OAuth2 Response Error: %v", re.Error)
 	})
 
-	// HTTP
+	// GIN
 	r := gin.Default()
 	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(otelgin.Middleware("auth-service"))
 
 	// — Health check —
 	r.GET("/health", func(c *gin.Context) {

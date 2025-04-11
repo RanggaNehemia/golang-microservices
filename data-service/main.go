@@ -10,13 +10,19 @@ import (
 	"github.com/RanggaNehemia/golang-microservices/data-service/database"
 	"github.com/RanggaNehemia/golang-microservices/data-service/middleware"
 	"github.com/RanggaNehemia/golang-microservices/data-service/models"
+	"github.com/RanggaNehemia/golang-microservices/data-service/tracing"
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 func main() {
+	shutdown := tracing.InitTracer()
+	defer shutdown()
+
 	database.ConnectDatabase()
 
 	router := gin.Default()
+	router.Use(otelgin.Middleware("data-service"))
 
 	go func() {
 		ticker := time.NewTicker(time.Minute)
