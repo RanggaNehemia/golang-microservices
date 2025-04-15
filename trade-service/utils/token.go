@@ -20,7 +20,7 @@ var (
 func GetMachineToken() (string, error) {
 	clientID := os.Getenv("TRADE_SERVICE_CLIENT_ID")
 	clientSecret := os.Getenv("TRADE_SERVICE_CLIENT_SECRET")
-	tokenURL := os.Getenv("AUTH_URL") + "/oauth/introspect"
+	tokenURL := os.Getenv("AUTH_URL") + "/oauth/token"
 
 	mu.Lock()
 	defer mu.Unlock()
